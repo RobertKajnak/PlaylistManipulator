@@ -124,6 +124,30 @@ def get_artist_title(meta, artist = '', title = ''):
     
     return artist, title
 
+def save_tracklist_to_file(tracks,output_fn):
+    with open(output_fn,'w', encoding="utf-8") as g:
+            g.write('#EXTM3U\n')
+            for fn in tracks:
+                if fn[0]=='?':
+                    g.write(fn[1:])
+                else:
+                    meta = mutagen.File(os.path.join(base,fn))
+                    length = int(meta.info.length) if meta is not None else 0
+                    artist, title = get_artist_title(meta,
+                            title = os.path.splitext(
+                                        os.path.basename(fn))[0])
+                    
+                    if len(artist)>0:
+                        g.write('#EXTINF:{},{} – {}\n'.format(
+                            length,
+                            artist,
+                            title))
+                    else:
+                        g.write('#EXTINF:{},{}\n'.format(
+                            length,
+                            title))
+                    g.write(fn)
+                g.write('\n')
 
 if __name__ == '__main__':
     # Create Playlist
@@ -157,39 +181,36 @@ if __name__ == '__main__':
                  group_title = os.path.splitext(
                      os.path.basename(output_fn))[0])
         
-        with open(output_fn,'w', encoding="utf-8") as g:
-            g.write('#EXTM3U\n')
-            for fn in fns:
-                if fn[0]=='?':
-                    g.write(fn[1:])
-                else:
-                    meta = mutagen.File(os.path.join(base,fn))
-                    # meta = mutagen.mp3.MP3(os.path.join(base,fn))
-                    # print(meta)
-                    length = int(meta.info.length) if meta is not None else 0
-                    artist, title = get_artist_title(meta,
-                            title = os.path.splitext(
-                                        os.path.basename(fn))[0])
-                    
-                    if len(artist)>0:
-                        g.write('#EXTINF:{},{} – {}\n'.format(
-                            length,
-                            artist,
-                            title))
-                    else:
-                        g.write('#EXTINF:{},{}\n'.format(
-                            length,
-                            title))
-                    g.write(fn)
-                g.write('\n')
+        save_tracklist_to_file(fns,output_fn)
         #songcount = sum([1 if fn[:7]=='#EXTINF'  else 0 for fn in fns])
-        groupcount = sum([1 if fn[:8]=='?#EXTGRP' in fn else 0 for fn in fns])
+        groupcount = sum([1 if fn[:9]=='?#EXTGRP:' in fn else 0 for fn in fns])
         songcount = len(fns) - groupcount
         print('{} songs in {} groups have been saved to file'
                       .format(songcount,groupcount))
     elif choice == 2:
-        print ("not implemented")
+        fn = input("Enter the file name of the first playlist to be merged.\n"
+                  "Pressing enter on an empty line will finish collecting the \n"
+                  "Paths and prompt for the save file name\n")
         
+        merged = open(fn, 'r', encoding='utf').readlines()
+        
+        while True:
+            fn = input("Enter next file name:\n")
+            if fn != '':
+                break
+            try:
+                partial = open(fn, 'r', encoding='utf').readlines()
+                if partial[1][:8] != '#EXTGRP:':
+                    merged.append('#EXTGRP:{}\n'.format(os.path.splitext(
+                                            os.path.basename(fn))[0]))
+                merged += partial[1:]
+            except Exception as e:
+                print("Could not read from file: {}".format(e))
+        
+        fn_out = input("Enter output playlist filename:\n")
+        open(fn_out,'w',encoding='utf-8').writelines(merged)
+            
+            
     elif choice == 3:
         print ("Not implemented")
         
