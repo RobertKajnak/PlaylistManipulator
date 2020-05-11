@@ -7,7 +7,10 @@ Created on Sun May 10 11:44:44 2020
 
 import os
 import mutagen
+import re
+    
 DEBUG = False
+EXTENSIONS = ['mp3', 'flac', 'm4a', '.ogg']
 
 def get_all_files(path,base,files = [],
                   extensions = ['mp3', 'flac',
@@ -61,7 +64,8 @@ def get_all_files(path,base,files = [],
         #therfore that needs to be attached. The base remains unchanged
         files = get_all_files(os.path.join(path,folder),
                               base,files,
-                              group_title=folder)
+                              group_title=folder,
+                              extensions=extensions)
         
     return files
         
@@ -148,6 +152,28 @@ def get_artist_title(meta, artist = '', title = ''):
     
     return artist, title
 
+def get_EXTINF(filename):
+    meta = mutagen.File(filename)
+    #If no meta can be retrieved 0 is used as placeholder for length
+    length = int(meta.info.length) if meta is not None else 0
+    
+    #if the file name cannot be retrieved, the file name is 
+    #used instead (default value of title)
+    artist, title = get_artist_title(meta,
+            title = os.path.splitext(
+                        os.path.basename(filename))[0])
+    #The EXTINF field only has 2 fields, {} - {} is only a 
+    #convention. If the artist cannot be retrieved, it is skipped
+    if len(artist)>0:
+        return '#EXTINF:{},{} – {}\n'.format(
+                                            length,
+                                            artist,
+                                            title)
+    else:
+        return '#EXTINF:{},{}\n'.format(
+                                        length,
+                                        title)
+
 def save_tracklist_to_file(tracks,input_folder,output_fn):
     """
     Save a list of filenames and ? marked meta commands to the specified files,
@@ -177,26 +203,7 @@ def save_tracklist_to_file(tracks,input_folder,output_fn):
                 if fn[0]=='?':
                     g.write(fn[1:])
                 else:
-                    meta = mutagen.File(os.path.join(input_folder,fn))
-                    #If no meta can be retrieved 0 is used as placeholder for length
-                    length = int(meta.info.length) if meta is not None else 0
-                    
-                    #if the file name cannot be retrieved, the file name is 
-                    #used instead (default value of title)
-                    artist, title = get_artist_title(meta,
-                            title = os.path.splitext(
-                                        os.path.basename(fn))[0])
-                    #The EXTINF field only has 2 fields, {} - {} is only a 
-                    #convention. If the artist cannot be retrieved, it is skipped
-                    if len(artist)>0:
-                        g.write('#EXTINF:{},{} – {}\n'.format(
-                            length,
-                            artist,
-                            title))
-                    else:
-                        g.write('#EXTINF:{},{}\n'.format(
-                            length,
-                            title))
+                    g.write(get_EXTINF(os.path.join(input_folder,fn)))
                     g.write(fn)
                 g.write('\n')
 
@@ -248,6 +255,17 @@ def split_merged_playlist(merged):
     
     return split, groupcount, unnamed_group_tag
 
+def reconstruct_merged_playlist(split,unnamed_group_tag):
+    merged = ['#EXTM3U\n']
+    for key, val in split.items():
+        if key[:len(unnamed_group_tag)] == unnamed_group_tag:
+            merged.append('#EXTM3U')
+        else:
+            merged.append('#EXTGRP:{}'.format(key))
+        for line in val:
+            merged.append(line)
+    return merged
+
 def sanitize_fn(fn):
     """ Sanitizes Filename. Removes beginning and trailing quotes"""
     if (fn[0]=="'" and fn[-1]=="'") or (fn[0]=='"' and fn[-1]=='"'):
@@ -263,17 +281,22 @@ def input_fn(prompt):
     else:
         return sanitize_fn(ip)
 
+def str_smaller_win(str1,str2):
+    convert = lambda text: int(text) if text.isdigit() else text.lower() 
+    alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key)]
+    return alphanum_key(str1)<alphanum_key(str2)
+
 if __name__ == '__main__':
     # Create Playlist
     # Merge Playlists
     # Split Playlists
     # Insert into Playlist
     choice = int(input('Welcome to the playlist manipulator\n'
-                       'Press a key:\n'
-                       '1. Create a playlist from a folder\n'
-                       '2. Merge several playlists\n'
-                       '3. Split a playlist, if it has components\n'
-                       '4. Insert songs from a folder into a playlist\n'))
+                        'Press a key:\n'
+                        '1. Create a playlist from a folder\n'
+                        '2. Merge several playlists\n'
+                        '3. Split a playlist, if it has components\n'
+                        '4. Insert songs from a folder into a playlist\n'))
     
     # Create
     if choice == 1:
@@ -294,7 +317,8 @@ if __name__ == '__main__':
         
         fns = get_all_files(path,base,
                  group_title = os.path.splitext(
-                     os.path.basename(output_fn))[0])
+                     os.path.basename(output_fn))[0],
+                 extensions= EXTENSIONS)
         
         save_tracklist_to_file(fns,base,output_fn)
         
@@ -334,7 +358,6 @@ if __name__ == '__main__':
         fn = input_fn("Enter the filename of the playlist to split:\n")
         
         merged = open(fn, 'r', encoding='utf').readlines()
-        
         split, groupcount, unnamed_group_tag = split_merged_playlist(merged)
 
         output_dir = input_fn('{} groups have been found. Type in a folder to output the '
@@ -366,11 +389,72 @@ if __name__ == '__main__':
         print('Files Saved')
         
     elif choice == 4:
-        print ("Not implemented")
+        fn_to_append = input_fn("Enter which file or files in folder to insert. "
+                            "The folder is not parsed recursively.\n")
+
+        if os.path.exists(fn_to_append) and os.path.isfile(fn_to_append):
+            fn_list = [fn_to_append]
+        elif os.path.exists(fn_to_append) and os.path.isdir(fn_to_append):
+            fn_list = os.listdir(fn_to_append)
+        else:
+            SystemExit("Invalid file specified")
         
+        fn_prefix = input_fn("Enter any prefix to add to file paths, "
+                             "or leave blank\n")
+
+        fn_to_mod = input_fn("Enter playlist to insert into:\n")
         
+        merged = open(fn_to_mod, 'r', encoding='utf-8').readlines()
+        split, groupcount, unnamed_group_tag = split_merged_playlist(merged)
         
+        if groupcount>1:
+            print("There are {} groups in the selected file. "
+                  "Please select which group to add to:".format(groupcount))
+            idx_to_group = {}
+            for idx,group in enumerate(split.keys()):
+                idx_to_group[idx] = group
+                if group[:len(unnamed_group_tag)] == unnamed_group_tag:
+                    print('{}. Unnamed group {}'.format(idx, 
+                                        group[len(unnamed_group_tag):].rstrip()))
+                else:
+                    print('{}. {}'.format(idx,group.rstrip()))
+                
+            try:
+                idx = int(input())
+            except:
+                SystemExit("Invalid number specified")
+        else:
+            print('There is only a single group in the file. Inserting')
+            idx = 0
+            idx_to_group = {0:list(split.values())[0]}
         
+        inserted_songs = []
+        if idx in idx_to_group:
+            target_group = split[idx_to_group[idx]]
+            for f in fn_list:
+                if os.path.splitext(f)[-1][1:].lower() in EXTENSIONS:
+                    f_basename = os.path.basename(f)
+                    for i,v in enumerate(target_group):
+                        if v[:4] != '#EXT' and \
+                        str_smaller_win(f_basename,os.path.basename(v)):
+                            break;
+                            
+                    target_group.insert(i-1,os.path.join(fn_prefix,
+                                                    os.path.basename(f))+'\n')
+                    target_group.insert(i-1,get_EXTINF(
+                                            os.path.join(fn_to_append,f)))
+                    inserted_songs.append(os.path.basename(f))
+                    
+            merged_new = reconstruct_merged_playlist(split, unnamed_group_tag)
+            open(fn_to_mod,'w',encoding='utf-8').writelines(merged_new)
+            print("{} songs have been inserted into the playlist :"
+                                  .format(len(inserted_songs)))
+            for song in inserted_songs:
+                print(song)
+            
+        else:
+            SystemExit("Invalid number specified")
+            
         
         
         
