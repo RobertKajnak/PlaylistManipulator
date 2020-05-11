@@ -200,6 +200,69 @@ def save_tracklist_to_file(tracks,input_folder,output_fn):
                     g.write(fn)
                 g.write('\n')
 
+def split_merged_playlist(merged):
+    """
+    Split a merged playlist into separate files. #EXTM3U and #EXTGRP: markers
+    are used to determine splits. Empty groups are discarded
+
+    Parameters
+    ----------
+    merged : list of strings
+        a list containing the contents of a playlist file
+
+    Returns
+    -------
+    split : dict
+        keys are the name of the groups,
+    groupcount : int
+        number of non-emtyp groups
+    unnamed_group_tag: str
+        The prefix that denotes the separation of the sections
+
+    """
+
+    unnamed_group_tag = '__UNNAMED_GROUP_123?x_'    
+    groupcount = 0
+    split = {}
+
+    for line in merged:
+        if line[:8] == '#EXTGRP:' or line[:7] == '#EXTM3U':
+            split_sublist = []
+            groupcount += 1
+            if line[:8] == '#EXTGRP:':
+                split[line[8:]] = split_sublist
+            #Unnamed groups are marked with a name that is unlikely to be used
+            elif line[:7] == '#EXTM3U':
+                split[unnamed_group_tag + str(groupcount)] =  split_sublist
+        else:
+            split_sublist.append(line)
+    
+    #Remove empty groups
+    to_remove = []
+    for key,val in split.items():
+        if val == []:
+            to_remove.append(key)
+            groupcount -= 1
+    for key in to_remove:
+        split.pop(key)
+    
+    return split, groupcount, unnamed_group_tag
+
+def sanitize_fn(fn):
+    """ Sanitizes Filename. Removes beginning and trailing quotes"""
+    if (fn[0]=="'" and fn[-1]=="'") or (fn[0]=='"' and fn[-1]=='"'):
+        return fn[1:-1]
+    return fn
+        
+
+def input_fn(prompt):
+    """ Assumes input is a Filename. Removes beginning and trailing quotes"""
+    ip = input(prompt)
+    if len(ip)<1:
+        return ip
+    else:
+        return sanitize_fn(ip)
+
 if __name__ == '__main__':
     # Create Playlist
     # Merge Playlists
@@ -212,14 +275,15 @@ if __name__ == '__main__':
                        '3. Split a playlist, if it has components\n'
                        '4. Insert songs from a folder into a playlist\n'))
     
+    # Create
     if choice == 1:
-        path =input("Please specify the directory to parse. If none is "
+        path =input_fn("Please specify the directory to parse. If none is "
                     "specified, the save file's path will be used\n")
         
-        base = input("Please specify the start of the relative path.\n"
+        base = input_fn("Please specify the start of the relative path.\n"
                      "If none is specified, the parse path will be used\n")
         
-        output_fn = input("Please specify save filename.\n")
+        output_fn = input_fn("Please specify save filename.\n")
         
         if len(output_fn)<1:
             raise ValueError("The output path must be specified")
@@ -227,7 +291,7 @@ if __name__ == '__main__':
             path = os.path.dirname(path)
         if len(base)<1:
             base = path
-            
+        
         fns = get_all_files(path,base,
                  group_title = os.path.splitext(
                      os.path.basename(output_fn))[0])
@@ -239,21 +303,20 @@ if __name__ == '__main__':
         
         print('{} songs in {} groups have been saved to file'
                       .format(songcount,groupcount))
+    
+    # Merge
     elif choice == 2:
-        fn = input("Enter the file name of the first playlist to be merged.\n"
+        fn = input_fn("Enter the file name of the first playlist to be merged.\n"
                   "Pressing enter on an empty line will finish collecting the \n"
                   "Paths and prompt for the save file name\n")
-        if fn[0]=="'" and fn[-1]=="'":
-            fn = fn[1:-1]
         
         merged = open(fn, 'r', encoding='utf').readlines()
         
         while True:
-            fn = input("Enter next file name:\n")
+            fn = input_fn("Enter next file name:\n")
             if fn == '':
                 break
-            if fn[0]=="'" and fn[-1]=="'":
-                fn = fn[1:-1]
+
             try:
                 partial = open(fn, 'r', encoding='utf').readlines()
                 if partial[1][:8] != '#EXTGRP:':
@@ -263,13 +326,53 @@ if __name__ == '__main__':
             except Exception as e:
                 print("Could not read from file: {}".format(e))
         
-        fn_out = input("Enter output playlist filename:\n")
+        fn_out = input_fn("Enter output playlist filename:\n")
         open(fn_out,'w',encoding='utf-8').writelines(merged)
             
-            
+    # Split
     elif choice == 3:
-        print ("Not implemented")
+        fn = input_fn("Enter the filename of the playlist to split:\n")
+        
+        merged = open(fn, 'r', encoding='utf').readlines()
+        
+        split, groupcount, unnamed_group_tag = split_merged_playlist(merged)
+
+        output_dir = input_fn('{} groups have been found. Type in a folder to output the '
+              'playlists to\n'.format(groupcount))
+        
+        subcount = 1
+        for sublist_name, sublist_elements in split.items():
+            if sublist_name[:len(unnamed_group_tag)] \
+                            == unnamed_group_tag:
+                #Save unnamed groups with a more friendly name
+                out_filename = 'Group {}'.format(subcount)
+                subcount += 1
+            else:
+                out_filename = sublist_name.rstrip()
+            
+            out_filename = os.path.join(output_dir,out_filename+'.m3u')    
+            # Warn if file exists
+            if os.path.exists(out_filename):
+                answer = input("File <<{}>> already exists. Overwrite? (y/n)\n"
+                               .format(out_filename))
+                if len(answer)<1 or answer[0].lower() != 'y':
+                    continue
+                
+            # Add header and output contents. Group is removed and is in filename
+            with open(out_filename,'w', encoding='utf-8') as out_file:
+                out_file.write('#EXTM3U\n')
+                out_file.writelines(sublist_elements)
+                
+        print('Files Saved')
         
     elif choice == 4:
         print ("Not implemented")
+        
+        
+        
+        
+        
+        
+        
+        
         
