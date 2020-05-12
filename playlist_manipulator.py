@@ -6,8 +6,11 @@ Created on Sun May 10 11:44:44 2020
 """
 
 import os
-import mutagen
 import re
+from sys import argv
+import argparse
+
+import mutagen
     
 DEBUG = False
 EXTENSIONS = ['mp3', 'flac', 'm4a', '.ogg']
@@ -287,26 +290,98 @@ def str_smaller_win(str1,str2):
     return alphanum_key(str1)<alphanum_key(str2)
 
 if __name__ == '__main__':
-    # Create Playlist
-    # Merge Playlists
-    # Split Playlists
-    # Insert into Playlist
-    choice = int(input('Welcome to the playlist manipulator\n'
-                        'Press a key:\n'
-                        '1. Create a playlist from a folder\n'
-                        '2. Merge several playlists\n'
-                        '3. Split a playlist, if it has components\n'
-                        '4. Insert songs from a folder into a playlist\n'))
+    parser = argparse.ArgumentParser(description="Welcome to the playlist "
+                    "manipulator, command line parameter edition. \nTo use the"
+                    "interactive menu, start the command without any "
+                    "parameters. \nUse this program to create an m3u playlist "
+                    "from a folder, with groupings. \nIt can also merge and "
+                    "split lists, or insert a new song into it. ",
+                    formatter_class=argparse.RawTextHelpFormatter)
+    
+    mode_tooltip = "1. Create a playlist from a folder\n"\
+                    "2. Merge several playlists\n"\
+                    "3. Split a playlist, if it has components\n"\
+                    "4. Insert songs from a folder into a playlist\n"
+                
+    parser.add_argument('-mode',
+                    type = int,
+                    help = mode_tooltip+'\n')
+        
+    parser.add_argument('-path',
+                        type = str,
+                        nargs='*',
+                        help = 'By mode:\n'
+                        '1: Folder containing songs\n'
+                        '2: Paths separated by whitespaces to the playlists\n'
+                        '3: Path to the playlist\n'
+                        '4: The song to be inserted or folder containing the '
+                        'songs to be inserted. \n'
+                        'It is not parsed recursively\n\n')
+
+    parser.add_argument('-output_fn',
+                        type = str,
+                        help = 'The file (1,2,4) or folder (3) where the '
+                        'result will be output\n\n')
+
+    parser.add_argument('-base',
+                        type = str,
+                        default = '',
+                        help = 'Applies to mode 1 only\n'
+                        'Base path, in which the playlist will be saved. \n'
+                        'This is removed from the results. '
+                        "E.g. if path == 'C:/Music/Artist' and \n"
+                        "base == 'C:/Music' the filenames in the \n"
+                        "generated playlist will be Artist/Song.format\n\n")
+    
+    parser.add_argument('--overwrite',
+                         action = 'store_true',
+                         help='Only applies to 3\n'
+                         'If specified, existing files in the output '
+                         'directory \nwill be overwritten; they are skipped '
+                         'otherwise')
+    
+    parser.add_argument('-prefix',
+                        type = str,
+                        default = '',
+                        help = 'Applies to mode 4 only\n'
+                        'A prefix to be applied to the output files. \n'
+                        'E.g. if the directory contains song Lala.mp3, '
+                        'adding the prefix "Music" \nwill insert the song as '
+                        'Music/Lala.mp3 into the playlist\n\n')
+    
+    parser.add_argument('-target_group', 
+                        type=int,
+                        default=0,
+                        help = "Applies to mode 4 only\n"
+                        "The group in which the seletcted songs will be "
+                        "inserted into. \nCounting starts from 0")
+    
+    args = parser.parse_args()
+    
+    CONSOLE_MODE = True if len(argv)>1 else False
+    
+    if CONSOLE_MODE:
+        choice = args.mode
+    else:
+        choice = int(input('Welcome to the playlist manipulator!\n'
+                           'Hint: The program can also be run via command line '
+                           'parameter for repeated tasks. Start the program with '
+                           'the --help parameter for details'
+                            'Press a key:\n' + mode_tooltip))
     
     # Create
     if choice == 1:
-        path =input_fn("Please specify the directory to parse. If none is "
-                    "specified, the save file's path will be used\n")
-        
-        base = input_fn("Please specify the start of the relative path.\n"
-                     "If none is specified, the parse path will be used\n")
-        
-        output_fn = input_fn("Please specify save filename.\n")
+        if CONSOLE_MODE:
+            path=args.path[0]; base=args.base; output_fn=args.output_fn
+            
+        else:
+            path =input_fn("Please specify the directory to parse. If none is "
+                        "specified, the save file's path will be used\n")
+            
+            base = input_fn("Please specify the start of the relative path.\n"
+                         "If none is specified, the parse path will be used\n")
+            
+            output_fn = input_fn("Please specify save filename.\n")
         
         if len(output_fn)<1:
             raise ValueError("The output path must be specified")
@@ -330,16 +405,29 @@ if __name__ == '__main__':
     
     # Merge
     elif choice == 2:
-        fn = input_fn("Enter the file name of the first playlist to be merged.\n"
-                  "Pressing enter on an empty line will finish collecting the \n"
-                  "Paths and prompt for the save file name\n")
+        if CONSOLE_MODE:
+            fns = args.path
+            fn = fns[0]
+            fn_idx = 1
+            print(fns)
+        else:
+            fn = input_fn("Enter the file name of the first playlist to be "
+                          "merged.\n Pressing enter on an empty line will "
+                          "finish collecting the paths and prompt "
+                          "for the save file name\n")
         
         merged = open(fn, 'r', encoding='utf').readlines()
         
         while True:
-            fn = input_fn("Enter next file name:\n")
-            if fn == '':
-                break
+            if CONSOLE_MODE:
+                if fn_idx>= len(fns):
+                    break
+                fn = fns[fn_idx]
+                fn_idx +=1
+            else:
+                fn = input_fn("Enter next file name:\n")
+                if fn == '':
+                    break
 
             try:
                 partial = open(fn, 'r', encoding='utf').readlines()
@@ -350,18 +438,25 @@ if __name__ == '__main__':
             except Exception as e:
                 print("Could not read from file: {}".format(e))
         
-        fn_out = input_fn("Enter output playlist filename:\n")
+        if CONSOLE_MODE:
+            fn_out = args.output_fn
+        else:
+            fn_out = input_fn("Enter output playlist filename:\n")
         open(fn_out,'w',encoding='utf-8').writelines(merged)
-            
+           
+        print('Playlist succesfully saved')
     # Split
     elif choice == 3:
-        fn = input_fn("Enter the filename of the playlist to split:\n")
+        if CONSOLE_MODE:
+            fn = args.path[0]
+            output_dir = args.output_fn
+        else:
+            fn = input_fn("Enter the filename of the playlist to split:\n")
+            output_dir = input_fn('{} groups have been found. Type in a folder to output the '
+                  'playlists to\n'.format(groupcount))
         
         merged = open(fn, 'r', encoding='utf').readlines()
         split, groupcount, unnamed_group_tag = split_merged_playlist(merged)
-
-        output_dir = input_fn('{} groups have been found. Type in a folder to output the '
-              'playlists to\n'.format(groupcount))
         
         subcount = 1
         for sublist_name, sublist_elements in split.items():
@@ -376,10 +471,14 @@ if __name__ == '__main__':
             out_filename = os.path.join(output_dir,out_filename+'.m3u')    
             # Warn if file exists
             if os.path.exists(out_filename):
-                answer = input("File <<{}>> already exists. Overwrite? (y/n)\n"
-                               .format(out_filename))
-                if len(answer)<1 or answer[0].lower() != 'y':
-                    continue
+                if CONSOLE_MODE:
+                    if not args.overwrite:
+                        continue
+                else:
+                    answer = input("File <<{}>> already exists. Overwrite? (y/n)\n"
+                                   .format(out_filename))
+                    if len(answer)<1 or answer[0].lower() != 'y':
+                        continue
                 
             # Add header and output contents. Group is removed and is in filename
             with open(out_filename,'w', encoding='utf-8') as out_file:
@@ -389,43 +488,58 @@ if __name__ == '__main__':
         print('Files Saved')
         
     elif choice == 4:
-        fn_to_append = input_fn("Enter which file or files in folder to insert. "
-                            "The folder is not parsed recursively.\n")
+        if CONSOLE_MODE:
+            fn_to_append = args.path[0]
+        else:
+            fn_to_append = input_fn("Enter which file or files in folder to "
+                                    "insert. "
+                                    "The folder is not parsed recursively.\n")
 
         if os.path.exists(fn_to_append) and os.path.isfile(fn_to_append):
             fn_list = [fn_to_append]
         elif os.path.exists(fn_to_append) and os.path.isdir(fn_to_append):
             fn_list = os.listdir(fn_to_append)
         else:
-            SystemExit("Invalid file specified")
-        
-        fn_prefix = input_fn("Enter any prefix to add to file paths, "
-                             "or leave blank\n")
+            raise SystemExit("Invalid file specified")
+            
+        if CONSOLE_MODE:
+            fn_prefix = args.prefix
+            fn_to_mod = args.output_fn
+        else:
+            fn_prefix = input_fn("Enter any prefix to add to file paths, "
+                                 "or leave blank\n")
+    
+            fn_to_mod = input_fn("Enter playlist to insert into:\n")
 
-        fn_to_mod = input_fn("Enter playlist to insert into:\n")
-        
         merged = open(fn_to_mod, 'r', encoding='utf-8').readlines()
         split, groupcount, unnamed_group_tag = split_merged_playlist(merged)
         
         if groupcount>1:
-            print("There are {} groups in the selected file. "
+            if not CONSOLE_MODE:
+                print("There are {} groups in the selected file. "
                   "Please select which group to add to:".format(groupcount))
             idx_to_group = {}
             for idx,group in enumerate(split.keys()):
                 idx_to_group[idx] = group
-                if group[:len(unnamed_group_tag)] == unnamed_group_tag:
-                    print('{}. Unnamed group {}'.format(idx, 
-                                        group[len(unnamed_group_tag):].rstrip()))
-                else:
-                    print('{}. {}'.format(idx,group.rstrip()))
+                if not CONSOLE_MODE:
+                    if group[:len(unnamed_group_tag)] == unnamed_group_tag:
+                        print('{}. Unnamed group {}'.format(idx, 
+                                            group[len(unnamed_group_tag):]
+                                            .rstrip()))
+                    else:
+                        print('{}. {}'.format(idx,group.rstrip()))
                 
             try:
-                idx = int(input())
+                if CONSOLE_MODE:
+                    idx = args.target_group
+                else:
+                    idx = int(input())
             except:
-                SystemExit("Invalid number specified")
+                raise SystemExit("Invalid number specified")
         else:
             print('There is only a single group in the file. Inserting')
             idx = 0
+            #Creates a dictionary with a single entry that is the first group
             idx_to_group = {0:list(split.values())[0]}
         
         inserted_songs = []
@@ -446,14 +560,15 @@ if __name__ == '__main__':
                     inserted_songs.append(os.path.basename(f))
                     
             merged_new = reconstruct_merged_playlist(split, unnamed_group_tag)
+            print(fn_to_mod)
             open(fn_to_mod,'w',encoding='utf-8').writelines(merged_new)
-            print("{} songs have been inserted into the playlist :"
+            print("{} songs have been inserted into the playlist:"
                                   .format(len(inserted_songs)))
             for song in inserted_songs:
                 print(song)
             
         else:
-            SystemExit("Invalid number specified")
+            raise SystemExit("Invalid number specified")
             
         
         
