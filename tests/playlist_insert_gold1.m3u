@@ -1,0 +1,25 @@
+#EXTM3U
+#EXTGRP:Artist1
+#EXTINF:0,Song 1
+Artist1\Album1\Song1.mp3
+#EXTINF:0,Song5
+Artist1\Song5.mp3
+#EXTINF:0,Song6
+Artist1\Song6.mp3
+#EXTGRP:Album1
+#EXTINF:0,Song 1
+Artist1\Album1\Song1.mp3
+#EXTINF:0,Song 2
+Artist1\Album1\Song2.mp3
+#EXTINF:0,Song5
+Artist1\Album1\Song5.mp3
+#EXTGRP:Album2
+#EXTINF:0,Song3
+Artist1\Album2\Song 3.mp3
+#EXTINF:0,Song 4
+Artist1\Album2\Song 4.mp3
+#EXTGRP:日本の歌手
+#EXTINF:0,Song6
+日本の歌手\Romaji2.mp3
+#EXTINF:0,Song5
+日本の歌手\曲１.mp3

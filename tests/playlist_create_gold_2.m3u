@@ -1,0 +1,22 @@
+#EXTM3U
+#EXTGRP:playlist_create_testcase_2
+#EXTGRP:Artist1
+#EXTINF:0,Song5
+music\songs\Artist1\Song5.mp3
+#EXTINF:0,Song6
+music\songs\Artist1\Song6.mp3
+#EXTGRP:Album1
+#EXTINF:0,Song 1
+music\songs\Artist1\Album1\Song1.mp3
+#EXTINF:0,Song 2
+music\songs\Artist1\Album1\Song2.mp3
+#EXTGRP:Album2
+#EXTINF:0,Song3
+music\songs\Artist1\Album2\Song 3.mp3
+#EXTINF:0,Song 4
+music\songs\Artist1\Album2\Song 4.mp3
+#EXTGRP:日本の歌手
+#EXTINF:0,Song6
+music\songs\日本の歌手\Romaji2.mp3
+#EXTINF:0,Song5
+music\songs\日本の歌手\曲１.mp3
