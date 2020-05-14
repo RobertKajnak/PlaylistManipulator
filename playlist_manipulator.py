@@ -15,7 +15,7 @@ import mutagen
 DEBUG = False
 EXTENSIONS = ['mp3', 'flac', 'm4a', '.ogg']
 
-def get_all_files(path,base,files = [],
+def get_all_files(path,prefix='',files = [],
                   extensions = ['mp3', 'flac',
                                 'm4a', '.ogg'],
                   group_title = ''):
@@ -25,11 +25,11 @@ def get_all_files(path,base,files = [],
     path : str, path
         The path to be parsed
     base : str, path
-        base path, in which the playlist will be saved
-        this is removed from the results.
+        a prefix that is attached to the beginning of the filenames
         E.g. if path == 'C:/Music/Artist' and
-        base == 'C:/Music' the filenames in the
-        return value will be Artist/Song.format
+        and the music will be stored later or on an other device
+        under Music/Rock/
+        return value will be Music/Rock/Song.format
     files : list of str, optional
         The file list. Can be specified to
         include file names not in the folder. 
@@ -41,11 +41,12 @@ def get_all_files(path,base,files = [],
         the list of files in the directory
 
     """
-    #using .replace resuted in a '\\folder' type relative path, which was 
-    #interpreted as Drive:\\folder
-    relative = os.path.relpath(path,base)
+    
     # All files and folders in path
     ff = os.listdir(path)
+    
+    if files == []:
+        files = []
     
     #Folders are gathered and are recursively added after files
     folders = []
@@ -56,7 +57,7 @@ def get_all_files(path,base,files = [],
         #If name is a file, the extension is validated and appened to the list
         if os.path.isfile(os.path.join(path,name)):
             if os.path.splitext(name)[-1][1:].lower() in extensions:
-                files.append(os.path.join(relative,name))
+                files.append(os.path.join(prefix,name))
         else:
             #If name is a folder, it is saved for later processing.
             #Full path is added in the function call
@@ -66,7 +67,7 @@ def get_all_files(path,base,files = [],
         #The folder names will only have the name of the folder, without path,
         #therfore that needs to be attached. The base remains unchanged
         files = get_all_files(os.path.join(path,folder),
-                              base,files,
+                              os.path.join(prefix,folder),files,
                               group_title=folder,
                               extensions=extensions)
         
@@ -177,7 +178,7 @@ def get_EXTINF(filename):
                                         length,
                                         title)
 
-def save_tracklist_to_file(tracks,input_folder,output_fn):
+def save_tracklist_to_file(tracks,input_folder,prefix,output_fn):
     """
     Save a list of filenames and ? marked meta commands to the specified files,
     adding any necessary headers and extracting the meta information for the
@@ -197,7 +198,6 @@ def save_tracklist_to_file(tracks,input_folder,output_fn):
     None.
 
     """
-    
     with open(output_fn,'w', encoding="utf-8") as g:
             #File header
             g.write('#EXTM3U\n') 
@@ -206,7 +206,12 @@ def save_tracklist_to_file(tracks,input_folder,output_fn):
                 if fn[0]=='?':
                     g.write(fn[1:])
                 else:
-                    g.write(get_EXTINF(os.path.join(input_folder,fn)))
+                    if prefix=='':
+                        true_path = os.path.join(input_folder,fn) 
+                    else:
+                        true_path = fn.replace(prefix,input_folder)
+                    
+                    g.write(get_EXTINF(true_path))
                     g.write(fn)
                 g.write('\n')
 
@@ -289,77 +294,8 @@ def str_smaller_win(str1,str2):
     alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key)]
     return alphanum_key(str1)<alphanum_key(str2)
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Welcome to the playlist "
-                    "manipulator, command line parameter edition. \nTo use the"
-                    "interactive menu, start the command without any "
-                    "parameters. \nUse this program to create an m3u playlist "
-                    "from a folder, with groupings. \nIt can also merge and "
-                    "split lists, or insert a new song into it. ",
-                    formatter_class=argparse.RawTextHelpFormatter)
-    
-    mode_tooltip = "1. Create a playlist from a folder\n"\
-                    "2. Merge several playlists\n"\
-                    "3. Split a playlist, if it has components\n"\
-                    "4. Insert songs from a folder into a playlist\n"
-                
-    parser.add_argument('-mode',
-                    type = int,
-                    help = mode_tooltip+'\n')
-        
-    parser.add_argument('-path',
-                        type = str,
-                        nargs='*',
-                        help = 'By mode:\n'
-                        '1: Folder containing songs\n'
-                        '2: Paths separated by whitespaces to the playlists\n'
-                        '3: Path to the playlist\n'
-                        '4: The song to be inserted or folder containing the '
-                        'songs to be inserted. \n'
-                        'It is not parsed recursively\n\n')
-
-    parser.add_argument('-output_fn',
-                        type = str,
-                        help = 'The file (1,2,4) or folder (3) where the '
-                        'result will be output\n\n')
-
-    parser.add_argument('-base',
-                        type = str,
-                        default = '',
-                        help = 'Applies to mode 1 only\n'
-                        'Base path, in which the playlist will be saved. \n'
-                        'This is removed from the results. '
-                        "E.g. if path == 'C:/Music/Artist' and \n"
-                        "base == 'C:/Music' the filenames in the \n"
-                        "generated playlist will be Artist/Song.format\n\n")
-    
-    parser.add_argument('--overwrite',
-                         action = 'store_true',
-                         help='Only applies to 3\n'
-                         'If specified, existing files in the output '
-                         'directory \nwill be overwritten; they are skipped '
-                         'otherwise')
-    
-    parser.add_argument('-prefix',
-                        type = str,
-                        default = '',
-                        help = 'Applies to mode 4 only\n'
-                        'A prefix to be applied to the output files. \n'
-                        'E.g. if the directory contains song Lala.mp3, '
-                        'adding the prefix "Music" \nwill insert the song as '
-                        'Music/Lala.mp3 into the playlist\n\n')
-    
-    parser.add_argument('-target_group', 
-                        type=int,
-                        default=0,
-                        help = "Applies to mode 4 only\n"
-                        "The group in which the seletcted songs will be "
-                        "inserted into. \nCounting starts from 0")
-    
-    args = parser.parse_args()
-    
-    CONSOLE_MODE = True if len(argv)>1 else False
-    
+def execute_main(console_mode, args = None):
+    CONSOLE_MODE = console_mode
     if CONSOLE_MODE:
         choice = args.mode
     else:
@@ -372,14 +308,16 @@ if __name__ == '__main__':
     # Create
     if choice == 1:
         if CONSOLE_MODE:
-            path=args.path[0]; base=args.base; output_fn=args.output_fn
+            path=args.path[0]; prefix=args.prefix; output_fn=args.output_fn
             
         else:
             path =input_fn("Please specify the directory to parse. If none is "
                         "specified, the save file's path will be used\n")
             
-            base = input_fn("Please specify the start of the relative path.\n"
-                         "If none is specified, the parse path will be used\n")
+            prefix = input_fn("Please specify the path prefix to be attached "
+                              "before the filenames, e.g. C;/Music is parsed "
+                              "but the paths should have Music at the "
+                              "beginning, set prefix=Music")
             
             output_fn = input_fn("Please specify save filename.\n")
         
@@ -387,15 +325,12 @@ if __name__ == '__main__':
             raise ValueError("The output path must be specified")
         if len(path)<1:
             path = os.path.dirname(path)
-        if len(base)<1:
-            base = path
         
-        fns = get_all_files(path,base,
+        fns = get_all_files(path,prefix,
                  group_title = os.path.splitext(
                      os.path.basename(output_fn))[0],
                  extensions= EXTENSIONS)
-        
-        save_tracklist_to_file(fns,base,output_fn)
+        save_tracklist_to_file(fns,path,prefix,output_fn)
         
         groupcount = sum([1 if fn[:9]=='?#EXTGRP:' in fn else 0 for fn in fns])
         songcount = len(fns) - groupcount
@@ -409,7 +344,6 @@ if __name__ == '__main__':
             fns = args.path
             fn = fns[0]
             fn_idx = 1
-            print(fns)
         else:
             fn = input_fn("Enter the file name of the first playlist to be "
                           "merged.\n Pressing enter on an empty line will "
@@ -455,7 +389,7 @@ if __name__ == '__main__':
             output_dir = input_fn('{} groups have been found. Type in a folder to output the '
                   'playlists to\n'.format(groupcount))
         
-        merged = open(fn, 'r', encoding='utf').readlines()
+        merged = open(fn, 'r', encoding='utf-8').readlines()
         split, groupcount, unnamed_group_tag = split_merged_playlist(merged)
         
         subcount = 1
@@ -499,6 +433,7 @@ if __name__ == '__main__':
             fn_list = [fn_to_append]
         elif os.path.exists(fn_to_append) and os.path.isdir(fn_to_append):
             fn_list = os.listdir(fn_to_append)
+            fn_list = [os.path.join(fn_to_append,f_s) for f_s in fn_list]
         else:
             raise SystemExit("Invalid file specified")
             
@@ -514,6 +449,7 @@ if __name__ == '__main__':
         merged = open(fn_to_mod, 'r', encoding='utf-8').readlines()
         split, groupcount, unnamed_group_tag = split_merged_playlist(merged)
         
+
         if groupcount>1:
             if not CONSOLE_MODE:
                 print("There are {} groups in the selected file. "
@@ -552,15 +488,15 @@ if __name__ == '__main__':
                         if v[:4] != '#EXT' and \
                         str_smaller_win(f_basename,os.path.basename(v)):
                             break;
-                            
+                    else:
+                        i+=2
                     target_group.insert(i-1,os.path.join(fn_prefix,
                                                     os.path.basename(f))+'\n')
-                    target_group.insert(i-1,get_EXTINF(
-                                            os.path.join(fn_to_append,f)))
+                    target_group.insert(i-1,get_EXTINF(f))
                     inserted_songs.append(os.path.basename(f))
                     
             merged_new = reconstruct_merged_playlist(split, unnamed_group_tag)
-            print(fn_to_mod)
+            
             open(fn_to_mod,'w',encoding='utf-8').writelines(merged_new)
             print("{} songs have been inserted into the playlist:"
                                   .format(len(inserted_songs)))
@@ -569,6 +505,70 @@ if __name__ == '__main__':
             
         else:
             raise SystemExit("Invalid number specified")
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Welcome to the playlist "
+                    "manipulator, command line parameter edition. \nTo use the"
+                    "interactive menu, start the command without any "
+                    "parameters. \nUse this program to create an m3u playlist "
+                    "from a folder, with groupings. \nIt can also merge and "
+                    "split lists, or insert a new song into it. ",
+                    formatter_class=argparse.RawTextHelpFormatter)
+    
+    mode_tooltip = "1. Create a playlist from a folder\n"\
+                    "2. Merge several playlists\n"\
+                    "3. Split a playlist, if it has components\n"\
+                    "4. Insert songs from a folder into a playlist\n"
+                
+    parser.add_argument('-mode',
+                    type = int,
+                    help = mode_tooltip+'\n')
+        
+    parser.add_argument('-path',
+                        type = str,
+                        nargs='*',
+                        help = 'By mode:\n'
+                        '1: Folder containing songs\n'
+                        '2: Paths separated by whitespaces to the playlists\n'
+                        '3: Path to the playlist\n'
+                        '4: The song to be inserted or folder containing the '
+                        'songs to be inserted. \n'
+                        'It is not parsed recursively\n\n')
+
+    parser.add_argument('-output_fn',
+                        type = str,
+                        help = 'The file (1,2,4) or folder (3) where the '
+                        'result will be output\n\n')
+        
+    parser.add_argument('-prefix',
+                        type = str,
+                        default = '',
+                        help = 'Applies to modes 1 and 4 only\n'
+                        'A prefix to be applied to the output files. \n'
+                        'E.g. if the directory contains song Lala.mp3, '
+                        'adding the prefix "Music" \nwill insert the song as '
+                        'Music/Lala.mp3 into the playlist\n\n')
+    
+    parser.add_argument('--overwrite',
+                         action = 'store_true',
+                         help='Only applies to 3\n'
+                         'If specified, existing files in the output '
+                         'directory \nwill be overwritten; they are skipped '
+                         'otherwise')
+    
+    parser.add_argument('-target_group', 
+                        type=int,
+                        default=0,
+                        help = "Applies to mode 4 only\n"
+                        "The group in which the seletcted songs will be "
+                        "inserted into. \nCounting starts from 0")
+    
+    args = parser.parse_args()
+    
+    CONSOLE_MODE = True if len(argv)>1 else False
+    
+    execute_main(CONSOLE_MODE,args)
             
         
         
